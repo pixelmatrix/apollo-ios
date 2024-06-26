@@ -24,7 +24,11 @@ public final class SQLiteDotSwiftDatabase: SQLiteDatabase {
     self.recordColumn = Expression<String>(Self.recordColumName)
     self.db = connection
   }
-  
+
+  public func setJournalMode(_ journalMode: JournalMode) throws {
+    try db.execute("PRAGMA journal_mode = \(journalMode.rawValue);")
+  }
+
   public func createRecordsTableIfNeeded() throws {
     try self.db.run(self.records.create(ifNotExists: true) { table in
       table.column(SQLite.Expression<Int64>(Self.idColumnName), primaryKey: .autoincrement)
