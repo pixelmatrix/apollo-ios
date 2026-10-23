@@ -42,6 +42,7 @@ actor AsyncReadWriteLock {
   func read(_ body: @Sendable @escaping () async throws -> Void) async throws {
     switch state {
     case .writing:
+      // `wakeNext()` counts queued readers before resuming them.
       await addToQueueAndWait(isWriter: false)
 
     case .reading:
@@ -49,13 +50,14 @@ actor AsyncReadWriteLock {
       // is waiting, we should queue the new reader for after the write.
       if !queue.isEmpty {
         await addToQueueAndWait(isWriter: false)
+      } else {
+        runningReadCount += 1
       }
-      
+
     case .idle:
       state = .reading
+      runningReadCount += 1
     }
-
-    runningReadCount += 1
 
     defer { readTaskDidFinish() }
 
@@ -101,6 +103,10 @@ actor AsyncReadWriteLock {
 
     case let .readBatch(continuations):
       state = .reading
+      // Count the readers before resuming them. Resumed readers re-enter the actor in priority order, so a reader
+      // in this batch could otherwise finish first, see a count of zero, and wake a writer while another reader from
+      // this batch is still waiting to run.
+      runningReadCount += UInt(continuations.count)
       for continuation in continuations {
         continuation.resume()
       }
